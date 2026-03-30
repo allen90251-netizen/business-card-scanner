@@ -1,1 +1,257 @@
-<!DOCTYPE html><html><head><title>Share</title></head><body>Test Share</body></html>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>名片王 - 分享名片</title>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --primary-light: #818CF8;
+      --success: #10B981;
+      --danger: #EF4444;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #1E293B;
+      --text-light: #64748B;
+      --border: #E2E8F0;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+      --radius: 12px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, var(--primary), #3730A3);
+      color: white;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .header h1 { font-size: 22px; }
+    .header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+
+    .countdown-bar {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+    .countdown-label { font-size: 13px; color: var(--text-light); }
+    .countdown-time {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 8px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .countdown-time.expiring { color: var(--danger); }
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: 3px;
+      transition: width 1s linear;
+    }
+    .progress-fill.expiring { background: linear-gradient(90deg, var(--danger), #F87171); }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: transform 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .card-name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .card-company { font-size: 14px; color: var(--primary); margin-bottom: 2px; }
+    .card-title { font-size: 13px; color: var(--text-light); margin-bottom: 12px; }
+    .card-info { display: grid; gap: 8px; }
+    .card-info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .card-info-icon { width: 20px; text-align: center; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #DBEAFE;
+      color: #1D4ED8;
+      margin-bottom: 12px;
+    }
+
+    .expired-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .expired-overlay.active { display: flex; }
+    .expired-box {
+      background: white;
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      max-width: 400px;
+    }
+    .expired-icon { font-size: 48px; margin-bottom: 12px; }
+    .expired-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .expired-sub { font-size: 14px; color: var(--text-light); }
+
+    .loading { text-align: center; padding: 60px; color: var(--text-light); }
+    .error { text-align: center; padding: 60px; color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>&#x1F4F7; 名片王 - 分享名片</h1>
+  <p>此連結包含有時效性的分享內容</p>
+</div>
+
+<div class="container">
+  <div class="countdown-bar" id="countdownBar">
+    <div class="countdown-label">連結剩餘有效時間</div>
+    <div class="countdown-time" id="countdownTime">--:--:--</div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:100%"></div></div>
+  </div>
+
+  <div id="cardsContainer">
+    <div class="loading" id="loadingState">&#x23F3; 載入中...</div>
+  </div>
+</div>
+
+<div class="expired-overlay" id="expiredOverlay">
+  <div class="expired-box">
+    <div class="expired-icon">&#x23F0;</div>
+    <div class="expired-text">分享連結已過期</div>
+    <div class="expired-sub">此連結的有效時間已結束，內容已無法檢視。</div>
+  </div>
+</div>
+
+<script>
+const shareId = window.location.pathname.split('/').pop();
+let totalSeconds = 0;
+let remainingSeconds = 0;
+let countdownInterval = null;
+
+async function loadShareData() {
+  try {
+    const res = await fetch('/api/share/' + shareId);
+    if (res.status === 410 || res.status === 404) {
+      showExpired();
+      return;
+    }
+    const data = await res.json();
+    if (!data.success) {
+      showExpired();
+      return;
+    }
+
+    remainingSeconds = data.data.remainingSeconds;
+    // Estimate total from expiresAt
+    const expiresAt = new Date(data.data.expiresAt);
+    // We'll use remaining for countdown
+    totalSeconds = remainingSeconds; // approximate
+
+    renderCards(data.data.cards);
+    startCountdown();
+  } catch (e) {
+    document.getElementById('loadingState').innerHTML = '<div class="error">&#x274C; 載入失敗：' + e.message + '</div>';
+  }
+}
+
+function renderCards(cards) {
+  const container = document.getElementById('cardsContainer');
+  if (cards.length === 0) {
+    container.innerHTML = '<div class="loading">沒有名片資料</div>';
+    return;
+  }
+
+  container.innerHTML = cards.map(c => `
+    <div class="card">
+      ${c.industry ? `<span class="badge">${esc(c.industry)}</span>` : ''}
+      <div class="card-name">${esc(c.name || '未知姓名')}</div>
+      ${c.company ? `<div class="card-company">${esc(c.company)}</div>` : ''}
+      ${c.title ? `<div class="card-title">${esc(c.title)}</div>` : ''}
+      <div class="card-info">
+        ${c.phone ? `<div class="card-info-row"><span class="card-info-icon">&#x1F4DE;</span> ${esc(c.phone)}</div>` : ''}
+        ${c.email ? `<div class="card-info-row"><span class="card-info-icon">&#x2709;&#xFE0F;</span> ${esc(c.email)}</div>` : ''}
+        ${c.website ? `<div class="card-info-row"><span class="card-info-icon">&#x1F310;</span> ${esc(c.website)}</div>` : ''}
+        ${c.address ? `<div class="card-info-row"><span class="card-info-icon">&#x1F4CD;</span> ${esc(c.address)}</div>` : ''}
+        ${c.notes ? `<div class="card-info-row"><span class="card-info-icon">&#x1F4DD;</span> ${esc(c.notes)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function startCountdown() {
+  const timeEl = document.getElementById('countdownTime');
+  const fillEl = document.getElementById('progressFill');
+
+  countdownInterval = setInterval(() => {
+    remainingSeconds--;
+    if (remainingSeconds <= 0) {
+      clearInterval(countdownInterval);
+      showExpired();
+      return;
+    }
+
+    const h = Math.floor(remainingSeconds / 3600);
+    const m = Math.floor((remainingSeconds % 3600) / 60);
+    const s = remainingSeconds % 60;
+    timeEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+    const pct = Math.max(0, (remainingSeconds / totalSeconds) * 100);
+    fillEl.style.width = pct + '%';
+
+    // Expiring warning (under 5 minutes)
+    if (remainingSeconds < 300) {
+      timeEl.classList.add('expiring');
+      fillEl.classList.add('expiring');
+    }
+  }, 1000);
+}
+
+function showExpired() {
+  document.getElementById('expiredOverlay').classList.add('active');
+  document.getElementById('countdownTime').textContent = '00:00:00';
+  document.getElementById('progressFill').style.width = '0%';
+  if (countdownInterval) clearInterval(countdownInterval);
+}
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+loadShareData();
+</script>
+</body>
+</html>

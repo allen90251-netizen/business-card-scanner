@@ -1,1 +1,1377 @@
-<!DOCTYPE html><html><head><title>Index</title></head><body>Test Index</body></html>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>名片王 - 智能名片掃描管理系統</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --primary-light: #818CF8;
+      --primary-dark: #3730A3;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #1E293B;
+      --text-light: #64748B;
+      --border: #E2E8F0;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+      --radius: 12px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ===== Header ===== */
+    .header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-lg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header h1 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
+    .header-stats { display: flex; gap: 16px; font-size: 13px; opacity: 0.9; }
+    .header-stats span { background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; }
+
+    /* ===== Navigation Tabs ===== */
+    .nav-tabs {
+      display: flex;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      overflow-x: auto;
+    }
+    .nav-tab {
+      padding: 14px 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-light);
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .nav-tab:hover { color: var(--primary); }
+    .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ===== Main Container ===== */
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ===== Cards ===== */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ===== Scanner Page ===== */
+    .scanner-area {
+      border: 3px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .scanner-area:hover { border-color: var(--primary); background: rgba(79,70,229,0.03); }
+    .scanner-area.has-image { padding: 16px; border-style: solid; border-color: var(--primary); }
+    .scanner-area img {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 8px;
+    }
+    .scanner-icon { font-size: 48px; margin-bottom: 12px; }
+    .scanner-text { color: var(--text-light); font-size: 14px; }
+
+    .camera-controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Video for camera */
+    #cameraVideo {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 8px;
+      display: none;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover:not(:disabled) { background: #059669; }
+    .btn-warning { background: var(--warning); color: white; }
+    .btn-warning:hover:not(:disabled) { background: #D97706; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover:not(:disabled) { background: #DC2626; }
+    .btn-outline {
+      background: transparent;
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+    }
+    .btn-outline:hover { background: rgba(79,70,229,0.05); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* ===== Form ===== */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-light);
+      margin-bottom: 6px;
+    }
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+    }
+    .form-textarea { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* ===== Progress Bar ===== */
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .progress-text { font-size: 13px; color: var(--text-light); text-align: center; }
+
+    /* ===== Table ===== */
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #F1F5F9; padding: 12px; text-align: left; font-weight: 600; white-space: nowrap; }
+    td { padding: 12px; border-bottom: 1px solid var(--border); }
+    tr:hover td { background: rgba(79,70,229,0.02); }
+    .checkbox-cell { width: 40px; text-align: center; }
+
+    /* ===== Badge ===== */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-tech { background: #DBEAFE; color: #1D4ED8; }
+    .badge-finance { background: #FEF3C7; color: #D97706; }
+    .badge-medical { background: #D1FAE5; color: #059669; }
+    .badge-education { background: #E0E7FF; color: #4338CA; }
+    .badge-manufacture { background: #FEE2E2; color: #DC2626; }
+    .badge-service { background: #F3E8FF; color: #7C3AED; }
+    .badge-government { background: #FECACA; color: #B91C1C; }
+    .badge-food { background: #FED7AA; color: #C2410C; }
+    .badge-retail { background: #CCFBF1; color: #0D9488; }
+    .badge-default { background: #F1F5F9; color: #475569; }
+
+    /* ===== Modal ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 { font-size: 18px; }
+    .modal-close { cursor: pointer; font-size: 24px; color: var(--text-light); background: none; border: none; }
+    .modal-body { padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 12px; justify-content: flex-end; }
+
+    /* ===== Search & Filter Bar ===== */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 14px 10px 36px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.44.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") no-repeat 12px center;
+    }
+    .search-input:focus { outline: none; border-color: var(--primary); }
+
+    /* ===== Share Link Card ===== */
+    .share-link-box {
+      background: #F0FDF4;
+      border: 1px solid #BBF7D0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .share-url {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .share-url input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      background: white;
+    }
+    .countdown {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+      text-align: center;
+      padding: 12px;
+    }
+
+    /* ===== Stats Grid ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    .stat-number { font-size: 32px; font-weight: 700; color: var(--primary); }
+    .stat-label { font-size: 13px; color: var(--text-light); margin-top: 4px; }
+
+    /* ===== Industry Chart ===== */
+    .industry-bars { display: flex; flex-direction: column; gap: 8px; }
+    .industry-bar-row { display: flex; align-items: center; gap: 12px; }
+    .industry-bar-label { width: 80px; font-size: 13px; text-align: right; }
+    .industry-bar-track { flex: 1; height: 28px; background: var(--border); border-radius: 6px; overflow: hidden; }
+    .industry-bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 8px; font-size: 12px; color: white; font-weight: 600; min-width: 30px; transition: width 0.5s; }
+    .industry-bar-count { width: 40px; font-size: 13px; font-weight: 600; }
+
+    /* ===== Toast ===== */
+    .toast-container { position: fixed; top: 80px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 12px 20px;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast-success { background: var(--success); }
+    .toast-error { background: var(--danger); }
+    .toast-info { background: var(--primary); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+      .header { padding: 12px 16px; }
+      .header h1 { font-size: 18px; }
+      .header-stats { display: none; }
+      .container { padding: 12px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ===== Empty State ===== */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-light);
+    }
+    .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state-text { font-size: 16px; margin-bottom: 8px; }
+    .empty-state-sub { font-size: 13px; }
+
+    /* Select all checkbox */
+    .select-all-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: #F1F5F9;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Header -->
+<div class="header">
+  <h1>&#x1F4F7; 名片王</h1>
+  <div class="header-stats">
+    <span id="headerTotal">0 張名片</span>
+    <span id="headerIndustries">0 個產業</span>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+  <div class="nav-tab active" data-page="scanner">&#x1F4F7; 掃描名片</div>
+  <div class="nav-tab" data-page="manage">&#x1F4CB; 名片管理</div>
+  <div class="nav-tab" data-page="share">&#x1F517; 分享中心</div>
+  <div class="nav-tab" data-page="stats">&#x1F4CA; 統計分析</div>
+</div>
+
+<div class="container">
+
+  <!-- ===== PAGE: Scanner ===== -->
+  <div class="page active" id="page-scanner">
+    <div class="card">
+      <div class="card-title">&#x1F4F8; 掃描名片</div>
+      <div class="scanner-area" id="scannerArea" onclick="document.getElementById('fileInput').click()">
+        <video id="cameraVideo" autoplay playsinline></video>
+        <img id="previewImage" style="display:none;">
+        <div id="scannerPlaceholder">
+          <div class="scanner-icon">&#x1F4F7;</div>
+          <div class="scanner-text">點擊此處上傳名片圖片，或使用下方按鈕拍照</div>
+          <div class="scanner-text" style="margin-top:8px; font-size:12px;">支援 JPG、PNG 格式</div>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+      <div class="camera-controls">
+        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">&#x1F4C1; 選擇圖片</button>
+        <button class="btn btn-outline" id="cameraBtn" onclick="toggleCamera()">&#x1F4F7; 開啟相機</button>
+        <button class="btn btn-success" id="captureBtn" onclick="capturePhoto()" style="display:none">&#x1F4F8; 拍照</button>
+        <button class="btn btn-warning" id="scanBtn" onclick="startOCR()" disabled>&#x1F50D; 開始辨識</button>
+      </div>
+    </div>
+
+    <!-- OCR Progress -->
+    <div class="card" id="ocrProgress" style="display:none">
+      <div class="card-title">&#x1F504; 正在辨識中...</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="progress-text" id="progressText">準備中...</div>
+    </div>
+
+    <!-- Parsed Result Form -->
+    <div class="card" id="resultCard" style="display:none">
+      <div class="card-title">&#x2705; 辨識結果 - 請確認資料</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">姓名</label>
+          <input class="form-input" id="f_name" placeholder="輸入姓名">
+        </div>
+        <div class="form-group">
+          <label class="form-label">職稱</label>
+          <input class="form-input" id="f_title" placeholder="輸入職稱">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">公司名稱</label>
+          <input class="form-input" id="f_company" placeholder="輸入公司名稱">
+        </div>
+        <div class="form-group">
+          <label class="form-label">產業分類</label>
+          <select class="form-select" id="f_industry">
+            <option value="">自動分類</option>
+            <option value="科技業">科技業</option>
+            <option value="金融業">金融業</option>
+            <option value="醫療業">醫療業</option>
+            <option value="教育業">教育業</option>
+            <option value="製造業">製造業</option>
+            <option value="服務業">服務業</option>
+            <option value="政府機關">政府機關</option>
+            <option value="餐飲業">餐飲業</option>
+            <option value="零售業">零售業</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">電話</label>
+          <input class="form-input" id="f_phone" placeholder="輸入電話號碼">
+        </div>
+        <div class="form-group">
+          <label class="form-label">手機</label>
+          <input class="form-input" id="f_mobile" placeholder="輸入手機號碼">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-input" id="f_email" placeholder="輸入電子郵件">
+        </div>
+        <div class="form-group">
+          <label class="form-label">網站</label>
+          <input class="form-input" id="f_website" placeholder="輸入網站網址">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">地址</label>
+        <input class="form-input" id="f_address" placeholder="輸入地址">
+      </div>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <textarea class="form-textarea" id="f_notes" placeholder="其他備註資訊"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">OCR 原始文字</label>
+        <textarea class="form-textarea" id="f_rawText" readonly style="background:#F8FAFC; font-size:12px;"></textarea>
+      </div>
+      <div style="display:flex; gap:12px; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-outline" onclick="resetScanner()">&#x1F504; 重新掃描</button>
+        <button class="btn btn-success" onclick="saveCard()">&#x1F4BE; 儲存名片</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: Manage ===== -->
+  <div class="page" id="page-manage">
+    <div class="filter-bar">
+      <input class="search-input" id="searchInput" placeholder="搜尋姓名、公司、Email..." oninput="loadCards()">
+      <select class="form-select" id="filterIndustry" style="width:auto; min-width:120px" onchange="loadCards()">
+        <option value="">全部產業</option>
+        <option value="科技業">科技業</option>
+        <option value="金融業">金融業</option>
+        <option value="醫療業">醫療業</option>
+        <option value="教育業">教育業</option>
+        <option value="製造業">製造業</option>
+        <option value="服務業">服務業</option>
+        <option value="政府機關">政府機關</option>
+        <option value="餐飲業">餐飲業</option>
+        <option value="零售業">零售業</option>
+        <option value="其他">其他</option>
+      </select>
+      <button class="btn btn-success btn-sm" onclick="exportSelected()">&#x1F4E5; 匯出 Excel</button>
+      <button class="btn btn-primary btn-sm" onclick="shareSelected()">&#x1F517; 分享選取</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteSelected()">&#x1F5D1; 刪除選取</button>
+    </div>
+
+    <div id="selectAllBar" class="select-all-bar" style="display:none">
+      <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+      <label for="selectAllCheckbox">全選 (<span id="selectedCount">0</span> 已選取)</label>
+    </div>
+
+    <div class="table-wrapper">
+      <table id="cardsTable">
+        <thead>
+          <tr>
+            <th class="checkbox-cell"><input type="checkbox" onchange="toggleSelectAll()" id="thSelectAll"></th>
+            <th>姓名</th>
+            <th>公司</th>
+            <th>職稱</th>
+            <th>電話</th>
+            <th>Email</th>
+            <th>產業</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="cardsTableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="manageEmpty">
+      <div class="empty-state-icon">&#x1F4CB;</div>
+      <div class="empty-state-text">尚無名片資料</div>
+      <div class="empty-state-sub">前往「掃描名片」開始新增</div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: Share ===== -->
+  <div class="page" id="page-share">
+    <div class="card">
+      <div class="card-title">&#x1F517; 分享連結管理</div>
+      <div id="shareLinksContainer"></div>
+      <div class="empty-state" id="shareEmpty">
+        <div class="empty-state-icon">&#x1F517;</div>
+        <div class="empty-state-text">尚無分享連結</div>
+        <div class="empty-state-sub">在「名片管理」頁面選取名片後點擊「分享選取」</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: Stats ===== -->
+  <div class="page" id="page-stats">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="card">
+      <div class="card-title">&#x1F3ED; 產業分布</div>
+      <div class="industry-bars" id="industryBars"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>&#x270F;&#xFE0F; 編輯名片</h3>
+      <button class="modal-close" onclick="closeEditModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit_id">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="edit_name"></div>
+        <div class="form-group"><label class="form-label">職稱</label><input class="form-input" id="edit_title"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">公司</label><input class="form-input" id="edit_company"></div>
+        <div class="form-group">
+          <label class="form-label">產業</label>
+          <select class="form-select" id="edit_industry">
+            <option value="">未分類</option>
+            <option value="科技業">科技業</option>
+            <option value="金融業">金融業</option>
+            <option value="醫療業">醫療業</option>
+            <option value="教育業">教育業</option>
+            <option value="製造業">製造業</option>
+            <option value="服務業">服務業</option>
+            <option value="政府機關">政府機關</option>
+            <option value="餐飲業">餐飲業</option>
+            <option value="零售業">零售業</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">電話</label><input class="form-input" id="edit_phone"></div>
+        <div class="form-group"><label class="form-label">手機</label><input class="form-input" id="edit_mobile"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="edit_email"></div>
+        <div class="form-group"><label class="form-label">網站</label><input class="form-input" id="edit_website"></div>
+      </div>
+      <div class="form-group"><label class="form-label">地址</label><input class="form-input" id="edit_address"></div>
+      <div class="form-group"><label class="form-label">備註</label><textarea class="form-textarea" id="edit_notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeEditModal()">取消</button>
+      <button class="btn btn-primary" onclick="updateCard()">儲存變更</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>&#x1F517; 建立分享連結</h3>
+      <button class="modal-close" onclick="closeShareModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:16px; color:var(--text-light); font-size:14px;">
+        已選取 <strong id="shareCount">0</strong> 張名片，設定分享連結有效時間：
+      </p>
+      <div class="form-group">
+        <label class="form-label">有效時間</label>
+        <select class="form-select" id="shareExpiry">
+          <option value="5">5 分鐘</option>
+          <option value="15">15 分鐘</option>
+          <option value="30">30 分鐘</option>
+          <option value="60" selected>1 小時</option>
+          <option value="180">3 小時</option>
+          <option value="360">6 小時</option>
+          <option value="720">12 小時</option>
+          <option value="1440">24 小時</option>
+          <option value="4320">3 天</option>
+          <option value="10080">7 天</option>
+        </select>
+      </div>
+      <div id="shareLinkResult" style="display:none">
+        <div class="share-link-box">
+          <strong>&#x2705; 分享連結已建立！</strong>
+          <div class="share-url">
+            <input id="shareUrlInput" readonly>
+            <button class="btn btn-primary btn-sm" onclick="copyShareLink()">&#x1F4CB; 複製</button>
+          </div>
+          <p style="font-size:12px; color:var(--text-light); margin-top:8px;">
+            過期時間：<span id="shareExpiryTime"></span>
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeShareModal()">關閉</button>
+      <button class="btn btn-primary" id="createShareBtn" onclick="createShareLink()">建立連結</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== Global State =====
+const API_BASE = window.location.origin;
+let selectedCardIds = new Set();
+let allCards = [];
+let cameraStream = null;
+
+// ===== Navigation =====
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('page-' + tab.dataset.page).classList.add('active');
+    if (tab.dataset.page === 'manage') loadCards();
+    if (tab.dataset.page === 'share') loadShares();
+    if (tab.dataset.page === 'stats') loadStats();
+  });
+});
+
+// ===== Toast =====
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// ===== Camera =====
+async function toggleCamera() {
+  const video = document.getElementById('cameraVideo');
+  const captureBtn = document.getElementById('captureBtn');
+  const cameraBtn = document.getElementById('cameraBtn');
+  const placeholder = document.getElementById('scannerPlaceholder');
+  const preview = document.getElementById('previewImage');
+
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+    video.style.display = 'none';
+    captureBtn.style.display = 'none';
+    placeholder.style.display = '';
+    cameraBtn.textContent = '📷 開啟相機';
+    return;
+  }
+
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    preview.style.display = 'none';
+    placeholder.style.display = 'none';
+    captureBtn.style.display = '';
+    cameraBtn.textContent = '⏹ 關閉相機';
+    document.getElementById('scannerArea').classList.add('has-image');
+  } catch (e) {
+    showToast('無法開啟相機：' + e.message, 'error');
+  }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  const preview = document.getElementById('previewImage');
+  preview.src = dataUrl;
+  preview.style.display = 'block';
+  video.style.display = 'none';
+  document.getElementById('captureBtn').style.display = 'none';
+  document.getElementById('scanBtn').disabled = false;
+
+  // Stop camera
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+    document.getElementById('cameraBtn').textContent = '📷 開啟相機';
+  }
+}
+
+// ===== File Select =====
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('previewImage');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    document.getElementById('scannerPlaceholder').style.display = 'none';
+    document.getElementById('cameraVideo').style.display = 'none';
+    document.getElementById('scannerArea').classList.add('has-image');
+    document.getElementById('scanBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ===== OCR =====
+async function startOCR() {
+  const img = document.getElementById('previewImage');
+  if (!img.src) return showToast('請先選擇或拍攝名片圖片', 'error');
+
+  const progressCard = document.getElementById('ocrProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const scanBtn = document.getElementById('scanBtn');
+
+  progressCard.style.display = 'block';
+  scanBtn.disabled = true;
+  scanBtn.textContent = '⏳ 辨識中...';
+
+  try {
+    const worker = await Tesseract.createWorker('chi_tra+eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          progressFill.style.width = pct + '%';
+          progressText.textContent = `辨識中... ${pct}%`;
+        } else {
+          progressText.textContent = m.status;
+        }
+      }
+    });
+
+    const { data: { text } } = await worker.recognize(img.src);
+    await worker.terminate();
+
+    progressFill.style.width = '100%';
+    progressText.textContent = '辨識完成！正在解析資料...';
+
+    setTimeout(() => {
+      parseBusinessCard(text);
+      progressCard.style.display = 'none';
+      document.getElementById('resultCard').style.display = 'block';
+      scanBtn.textContent = '🔍 開始辨識';
+      scanBtn.disabled = false;
+      showToast('&#x2705; 名片辨識完成！', 'success');
+    }, 500);
+
+  } catch (e) {
+    showToast('辨識失敗：' + e.message, 'error');
+    progressCard.style.display = 'none';
+    scanBtn.textContent = '🔍 開始辨識';
+    scanBtn.disabled = false;
+  }
+}
+
+// ===== Parse Business Card Text =====
+function parseBusinessCard(text) {
+  document.getElementById('f_rawText').value = text;
+
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Email
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
+  document.getElementById('f_email').value = emailMatch ? emailMatch[0] : '';
+
+  // Phone patterns
+  const phonePatterns = text.match(/(?:\+?886[-\s]?|0)[\d\s()-]{7,}/g) || [];
+  const phones = phonePatterns.map(p => p.replace(/\s+/g, '').trim());
+  document.getElementById('f_phone').value = phones[0] || '';
+  document.getElementById('f_mobile').value = phones[1] || '';
+
+  // Website
+  const urlMatch = text.match(/(?:https?:\/\/)?(?:www\.)?[\w.-]+\.(?:com|tw|org|net|io|co)(?:\.tw)?[\/\w.-]*/i);
+  document.getElementById('f_website').value = urlMatch ? urlMatch[0] : '';
+
+  // Address - look for patterns with 市/縣/區/路/街/號
+  const addressMatch = text.match(/[\u4e00-\u9fff]*(?:市|縣|區|鄉|鎮)[\u4e00-\u9fff]*(?:路|街|巷|弄|號|樓|段|大道|Rd|St|Ave).*/);
+  document.getElementById('f_address').value = addressMatch ? addressMatch[0] : '';
+
+  // Try to identify name, company, title from remaining text
+  const knownValues = [
+    document.getElementById('f_email').value,
+    document.getElementById('f_phone').value,
+    document.getElementById('f_mobile').value,
+    document.getElementById('f_website').value,
+    document.getElementById('f_address').value
+  ].filter(Boolean);
+
+  const remainingLines = lines.filter(line => {
+    return !knownValues.some(v => line.includes(v)) &&
+      !line.match(/^[\d\s()+.-]+$/) &&
+      !line.match(/^(?:tel|fax|phone|email|e-mail|address|地址|電話|傳真|手機|網址)/i);
+  });
+
+  // Title keywords
+  const titleKeywords = ['總經理', '經理', '主任', '總監', '董事', '執行長', 'CEO', 'CTO', 'CFO', 'COO',
+    '副總', '協理', '處長', '組長', '課長', '專員', '業務', '工程師', 'Manager', 'Director',
+    'Engineer', 'VP', 'President', 'Supervisor', '設計師', '顧問', '助理', '秘書', '主管'];
+
+  // Company keywords
+  const companyKeywords = ['股份', '有限', '公司', '企業', '集團', '工業', '科技', '國際',
+    'Corp', 'Inc', 'Ltd', 'LLC', 'Co.', 'Company', 'Group', 'Tech'];
+
+  let name = '', company = '', title = '';
+
+  for (const line of remainingLines) {
+    if (!company && companyKeywords.some(k => line.includes(k))) {
+      company = line;
+    } else if (!title && titleKeywords.some(k => line.includes(k))) {
+      title = line;
+    } else if (!name && line.length >= 2 && line.length <= 10 && /[\u4e00-\u9fff]/.test(line)) {
+      name = line;
+    }
+  }
+
+  // If still no name, pick shortest Chinese line
+  if (!name) {
+    const candidates = remainingLines.filter(l => /[\u4e00-\u9fff]/.test(l) && l !== company && l !== title);
+    candidates.sort((a, b) => a.length - b.length);
+    if (candidates.length > 0) name = candidates[0];
+  }
+
+  document.getElementById('f_name').value = name;
+  document.getElementById('f_company').value = company;
+  document.getElementById('f_title').value = title;
+
+  // Auto classify industry
+  const industry = classifyIndustry(company, title, text);
+  document.getElementById('f_industry').value = industry;
+}
+
+// ===== Industry Classification =====
+function classifyIndustry(company, title, fullText) {
+  const combined = (company + ' ' + title + ' ' + fullText).toLowerCase();
+
+  const rules = [
+    { industry: '科技業', keywords: ['科技', '軟體', 'software', 'tech', '資訊', 'it', '系統', '網路', '雲端', 'cloud', 'ai', '半導體', '電子', '晶片', 'semiconductor', '數位', 'digital', '程式', '通訊', '電腦', 'computer', '資料', 'data'] },
+    { industry: '金融業', keywords: ['銀行', 'bank', '證券', '保險', '金融', 'finance', '投資', 'invest', '基金', 'fund', '財務', '會計', '信託', '期貨'] },
+    { industry: '醫療業', keywords: ['醫院', '診所', '醫療', 'medical', '藥', '護理', '生技', 'biotech', '健康', 'health', '牙', '眼科', '檢驗'] },
+    { industry: '教育業', keywords: ['大學', '學校', '教育', 'education', '學院', '補習', '幼兒園', '培訓', '研究', '教授', '學系', 'university'] },
+    { industry: '製造業', keywords: ['製造', '工業', '工廠', 'manufacture', '機械', '鋼鐵', '化工', '材料', '模具', '生產', '精密'] },
+    { industry: '服務業', keywords: ['顧問', 'consult', '服務', 'service', '廣告', '行銷', 'marketing', '設計', 'design', '公關', '人力', '仲介', '管理'] },
+    { industry: '政府機關', keywords: ['政府', '公所', '局', '署', '部', '處', '中心', '委員會', '市政', '縣政', 'government'] },
+    { industry: '餐飲業', keywords: ['餐', '食品', 'food', '飲', '咖啡', '烘焙', '小吃', '廚', '美食', '餐廳'] },
+    { industry: '零售業', keywords: ['零售', '商店', '賣場', '百貨', 'retail', '電商', '購物', '批發', '貿易', 'trade', '進出口'] }
+  ];
+
+  for (const rule of rules) {
+    if (rule.keywords.some(k => combined.includes(k))) {
+      return rule.industry;
+    }
+  }
+  return '其他';
+}
+
+function getIndustryBadgeClass(industry) {
+  const map = {
+    '科技業': 'badge-tech', '金融業': 'badge-finance', '醫療業': 'badge-medical',
+    '教育業': 'badge-education', '製造業': 'badge-manufacture', '服務業': 'badge-service',
+    '政府機關': 'badge-government', '餐飲業': 'badge-food', '零售業': 'badge-retail'
+  };
+  return map[industry] || 'badge-default';
+}
+
+function getIndustryColor(industry) {
+  const map = {
+    '科技業': '#4F46E5', '金融業': '#D97706', '醫療業': '#059669',
+    '教育業': '#4338CA', '製造業': '#DC2626', '服務業': '#7C3AED',
+    '政府機關': '#B91C1C', '餐飲業': '#C2410C', '零售業': '#0D9488'
+  };
+  return map[industry] || '#64748B';
+}
+
+// ===== Save Card =====
+async function saveCard() {
+  const card = {
+    name: document.getElementById('f_name').value,
+    title: document.getElementById('f_title').value,
+    company: document.getElementById('f_company').value,
+    industry: document.getElementById('f_industry').value || classifyIndustry(
+      document.getElementById('f_company').value,
+      document.getElementById('f_title').value,
+      document.getElementById('f_rawText').value
+    ),
+    phone: document.getElementById('f_phone').value,
+    mobile: document.getElementById('f_mobile').value,
+    email: document.getElementById('f_email').value,
+    website: document.getElementById('f_website').value,
+    address: document.getElementById('f_address').value,
+    notes: document.getElementById('f_notes').value,
+    rawText: document.getElementById('f_rawText').value
+  };
+
+  if (!card.name && !card.company) {
+    return showToast('請至少填寫姓名或公司名稱', 'error');
+  }
+
+  try {
+    const res = await fetch(API_BASE + '/api/cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(card)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('&#x2705; 名片已儲存！', 'success');
+      resetScanner();
+      updateHeaderStats();
+    }
+  } catch (e) {
+    showToast('儲存失敗：' + e.message, 'error');
+  }
+}
+
+function resetScanner() {
+  document.getElementById('previewImage').style.display = 'none';
+  document.getElementById('previewImage').src = '';
+  document.getElementById('scannerPlaceholder').style.display = '';
+  document.getElementById('scannerArea').classList.remove('has-image');
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('resultCard').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  ['f_name','f_title','f_company','f_industry','f_phone','f_mobile','f_email','f_website','f_address','f_notes','f_rawText'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  });
+}
+
+// ===== Load Cards =====
+async function loadCards() {
+  const search = document.getElementById('searchInput').value;
+  const industry = document.getElementById('filterIndustry').value;
+  let url = API_BASE + '/api/cards?';
+  if (search) url += 'search=' + encodeURIComponent(search) + '&';
+  if (industry) url += 'industry=' + encodeURIComponent(industry);
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    allCards = data.data || [];
+    renderCardsTable();
+  } catch (e) {
+    showToast('載入失敗', 'error');
+  }
+}
+
+function renderCardsTable() {
+  const tbody = document.getElementById('cardsTableBody');
+  const empty = document.getElementById('manageEmpty');
+  const selectBar = document.getElementById('selectAllBar');
+
+  if (allCards.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    selectBar.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  selectBar.style.display = 'flex';
+
+  tbody.innerHTML = allCards.map(c => `
+    <tr>
+      <td class="checkbox-cell">
+        <input type="checkbox" class="card-checkbox" value="${c.id}" ${selectedCardIds.has(c.id) ? 'checked' : ''} onchange="toggleCardSelect('${c.id}')">
+      </td>
+      <td><strong>${esc(c.name || '-')}</strong></td>
+      <td>${esc(c.company || '-')}</td>
+      <td>${esc(c.title || '-')}</td>
+      <td>${esc(c.phone || c.mobile || '-')}</td>
+      <td>${esc(c.email || '-')}</td>
+      <td><span class="badge ${getIndustryBadgeClass(c.industry)}">${esc(c.industry || '未分類')}</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(c).replace(/'/g,"&#39;")})'>&#x270F;</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCard('${c.id}')">&#x1F5D1;</button>
+      </td>
+    </tr>
+  `).join('');
+
+  updateSelectedCount();
+}
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function toggleCardSelect(id) {
+  if (selectedCardIds.has(id)) selectedCardIds.delete(id);
+  else selectedCardIds.add(id);
+  updateSelectedCount();
+}
+
+function toggleSelectAll() {
+  const allChecked = allCards.every(c => selectedCardIds.has(c.id));
+  if (allChecked) {
+    allCards.forEach(c => selectedCardIds.delete(c.id));
+  } else {
+    allCards.forEach(c => selectedCardIds.add(c.id));
+  }
+  renderCardsTable();
+}
+
+function updateSelectedCount() {
+  document.getElementById('selectedCount').textContent = selectedCardIds.size;
+}
+
+// ===== CRUD Operations =====
+function openEditModal(card) {
+  document.getElementById('edit_id').value = card.id;
+  document.getElementById('edit_name').value = card.name || '';
+  document.getElementById('edit_title').value = card.title || '';
+  document.getElementById('edit_company').value = card.company || '';
+  document.getElementById('edit_industry').value = card.industry || '';
+  document.getElementById('edit_phone').value = card.phone || '';
+  document.getElementById('edit_mobile').value = card.mobile || '';
+  document.getElementById('edit_email').value = card.email || '';
+  document.getElementById('edit_website').value = card.website || '';
+  document.getElementById('edit_address').value = card.address || '';
+  document.getElementById('edit_notes').value = card.notes || '';
+  document.getElementById('editModal').classList.add('active');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('active');
+}
+
+async function updateCard() {
+  const id = document.getElementById('edit_id').value;
+  const card = {
+    name: document.getElementById('edit_name').value,
+    title: document.getElementById('edit_title').value,
+    company: document.getElementById('edit_company').value,
+    industry: document.getElementById('edit_industry').value,
+    phone: document.getElementById('edit_phone').value,
+    mobile: document.getElementById('edit_mobile').value,
+    email: document.getElementById('edit_email').value,
+    website: document.getElementById('edit_website').value,
+    address: document.getElementById('edit_address').value,
+    notes: document.getElementById('edit_notes').value
+  };
+
+  try {
+    const res = await fetch(API_BASE + '/api/cards/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(card)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('&#x2705; 已更新', 'success');
+      closeEditModal();
+      loadCards();
+      updateHeaderStats();
+    }
+  } catch (e) { showToast('更新失敗', 'error'); }
+}
+
+async function deleteCard(id) {
+  if (!confirm('確定要刪除這張名片嗎？')) return;
+  try {
+    await fetch(API_BASE + '/api/cards/' + id, { method: 'DELETE' });
+    showToast('已刪除', 'info');
+    selectedCardIds.delete(id);
+    loadCards();
+    updateHeaderStats();
+  } catch (e) { showToast('刪除失敗', 'error'); }
+}
+
+async function deleteSelected() {
+  if (selectedCardIds.size === 0) return showToast('請先選取名片', 'error');
+  if (!confirm(`確定要刪除 ${selectedCardIds.size} 張名片嗎？`)) return;
+  try {
+    await fetch(API_BASE + '/api/cards/batch-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedCardIds) })
+    });
+    showToast(`已刪除 ${selectedCardIds.size} 筆`, 'info');
+    selectedCardIds.clear();
+    loadCards();
+    updateHeaderStats();
+  } catch (e) { showToast('刪除失敗', 'error'); }
+}
+
+// ===== Export Excel =====
+async function exportSelected() {
+  let exportData;
+  if (selectedCardIds.size > 0) {
+    exportData = allCards.filter(c => selectedCardIds.has(c.id));
+  } else {
+    exportData = allCards;
+  }
+
+  if (exportData.length === 0) {
+    return showToast('沒有可匯出的資料', 'error');
+  }
+
+  const wsData = [
+    ['姓名', '公司', '職稱', '產業', '電話', '手機', 'Email', '網站', '地址', '備註', '建立時間']
+  ];
+
+  exportData.forEach(c => {
+    wsData.push([
+      c.name || '', c.company || '', c.title || '', c.industry || '',
+      c.phone || '', c.mobile || '', c.email || '', c.website || '',
+      c.address || '', c.notes || '', c.createdAt ? new Date(c.createdAt).toLocaleString('zh-TW') : ''
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 10 },
+    { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 25 },
+    { wch: 35 }, { wch: 20 }, { wch: 20 }
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, '名片資料');
+  XLSX.writeFile(wb, `名片王_匯出_${new Date().toLocaleDateString('zh-TW').replace(/\//g,'-')}.xlsx`);
+  showToast(`&#x1F4E5; 已匯出 ${exportData.length} 筆名片`, 'success');
+}
+
+// ===== Share =====
+function shareSelected() {
+  if (selectedCardIds.size === 0) return showToast('請先選取要分享的名片', 'error');
+  document.getElementById('shareCount').textContent = selectedCardIds.size;
+  document.getElementById('shareLinkResult').style.display = 'none';
+  document.getElementById('createShareBtn').style.display = '';
+  document.getElementById('shareModal').classList.add('active');
+}
+
+function closeShareModal() {
+  document.getElementById('shareModal').classList.remove('active');
+}
+
+async function createShareLink() {
+  const minutes = parseInt(document.getElementById('shareExpiry').value);
+  try {
+    const res = await fetch(API_BASE + '/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cardIds: Array.from(selectedCardIds), expiresInMinutes: minutes })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('shareUrlInput').value = data.data.shareUrl;
+      document.getElementById('shareExpiryTime').textContent = new Date(data.data.expiresAt).toLocaleString('zh-TW');
+      document.getElementById('shareLinkResult').style.display = 'block';
+      document.getElementById('createShareBtn').style.display = 'none';
+      showToast('&#x1F517; 分享連結已建立', 'success');
+    }
+  } catch (e) { showToast('建立分享連結失敗', 'error'); }
+}
+
+function copyShareLink() {
+  const input = document.getElementById('shareUrlInput');
+  input.select();
+  navigator.clipboard.writeText(input.value);
+  showToast('&#x1F4CB; 已複製到剪貼簿', 'success');
+}
+
+// ===== Load Shares =====
+async function loadShares() {
+  try {
+    const res = await fetch(API_BASE + '/api/shares');
+    const data = await res.json();
+    const shares = data.data || [];
+    const container = document.getElementById('shareLinksContainer');
+    const empty = document.getElementById('shareEmpty');
+
+    if (shares.length === 0) {
+      container.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+
+    container.innerHTML = shares.map(s => {
+      const isExpired = s.isExpired;
+      const remaining = formatCountdown(s.remainingSeconds);
+      return `
+        <div style="border:1px solid ${isExpired ? '#FCA5A5' : '#BBF7D0'}; border-radius:8px; padding:16px; margin-bottom:12px; background:${isExpired ? '#FEF2F2' : '#F0FDF4'}">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+              <strong>${s.cardIds.length} 張名片</strong>
+              <span style="color:var(--text-light); font-size:12px; margin-left:8px;">建立於 ${new Date(s.createdAt).toLocaleString('zh-TW')}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${isExpired
+                ? '<span class="badge badge-default" style="background:#FEE2E2;color:#DC2626;">已過期</span>'
+                : `<span class="badge badge-tech">剩餘 ${remaining}</span>`}
+              <span style="font-size:12px;color:var(--text-light);">瀏覽 ${s.viewCount} 次</span>
+              ${!isExpired ? `<button class="btn btn-danger btn-sm" onclick="revokeShare('${s.shareId}')">關閉</button>` : ''}
+            </div>
+          </div>
+          ${!isExpired ? `<div class="share-url" style="margin-top:8px;"><input value="${window.location.origin}/share/${s.shareId}" readonly style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;"><button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText('${window.location.origin}/share/${s.shareId}');showToast('已複製','success')">複製</button></div>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch (e) { showToast('載入分享連結失敗', 'error'); }
+}
+
+function formatCountdown(seconds) {
+  if (seconds <= 0) return '已過期';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}天${h}小時`;
+  if (h > 0) return `${h}小時${m}分`;
+  return `${m}分鐘`;
+}
+
+async function revokeShare(shareId) {
+  if (!confirm('確定要關閉此分享連結？')) return;
+  try {
+    await fetch(API_BASE + '/api/share/' + shareId, { method: 'DELETE' });
+    showToast('分享連結已關閉', 'info');
+    loadShares();
+  } catch (e) { showToast('操作失敗', 'error'); }
+}
+
+// ===== Stats =====
+async function loadStats() {
+  try {
+    const res = await fetch(API_BASE + '/api/stats');
+    const data = await res.json();
+    const stats = data.data;
+
+    const grid = document.getElementById('statsGrid');
+    const industries = Object.keys(stats.industryBreakdown);
+    grid.innerHTML = `
+      <div class="stat-card"><div class="stat-number">${stats.totalCards}</div><div class="stat-label">名片總數</div></div>
+      <div class="stat-card"><div class="stat-number">${industries.length}</div><div class="stat-label">產業分類</div></div>
+      <div class="stat-card"><div class="stat-number">${industries.length > 0 ? Math.max(...Object.values(stats.industryBreakdown)) : 0}</div><div class="stat-label">最多名片產業</div></div>
+    `;
+
+    const bars = document.getElementById('industryBars');
+    if (industries.length === 0) {
+      bars.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">尚無統計資料</div></div>';
+      return;
+    }
+
+    const maxCount = Math.max(...Object.values(stats.industryBreakdown));
+    const sorted = Object.entries(stats.industryBreakdown).sort((a, b) => b[1] - a[1]);
+
+    bars.innerHTML = sorted.map(([ind, count]) => {
+      const pct = Math.round((count / maxCount) * 100);
+      const color = getIndustryColor(ind);
+      return `
+        <div class="industry-bar-row">
+          <div class="industry-bar-label">${ind}</div>
+          <div class="industry-bar-track">
+            <div class="industry-bar-fill" style="width:${pct}%; background:${color};">${count}</div>
+          </div>
+          <div class="industry-bar-count">${count}張</div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) { showToast('載入統計失敗', 'error'); }
+}
+
+// ===== Header Stats =====
+async function updateHeaderStats() {
+  try {
+    const res = await fetch(API_BASE + '/api/stats');
+    const data = await res.json();
+    document.getElementById('headerTotal').textContent = data.data.totalCards + ' 張名片';
+    document.getElementById('headerIndustries').textContent = Object.keys(data.data.industryBreakdown).length + ' 個產業';
+  } catch (e) {}
+}
+
+// ===== Init =====
+updateHeaderStats();
+</script>
+
+</body>
+</html>
