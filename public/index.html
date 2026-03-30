@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>名片王 - 智能名片掃描管理系統</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+  <!-- Gemini Vision AI 驅動的 OCR - 不再需要 Tesseract.js --></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -430,6 +430,7 @@
         <div id="scannerPlaceholder">
           <div class="scanner-icon">&#x1F4F7;</div>
           <div class="scanner-text">點擊此處上傳名片圖片，或使用下方按鈕拍照</div>
+          <div class="scanner-text" style="margin-top:4px; color:var(--primary); font-weight:500; font-size:12px;">🤖 Gemini AI 驅動，高精準度辨識</div>
           <div class="scanner-text" style="margin-top:8px; font-size:12px;">支援 JPG、PNG 格式</div>
         </div>
       </div>
@@ -444,7 +445,7 @@
 
     <!-- OCR Progress -->
     <div class="card" id="ocrProgress" style="display:none">
-      <div class="card-title">&#x1F504; 正在辨識中...</div>
+      <div class="card-title">&#x1F504; Gemini AI 正在辨識中...</div>
       <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
       <div class="progress-text" id="progressText">準備中...</div>
     </div>
@@ -798,7 +799,7 @@ function handleFileSelect(event) {
   reader.readAsDataURL(file);
 }
 
-// ===== OCR =====
+// ===== OCR with Gemini Vision AI =====
 async function startOCR() {
   const img = document.getElementById('previewImage');
   if (!img.src) return showToast('請先選擇或拍攝名片圖片', 'error');
@@ -810,34 +811,58 @@ async function startOCR() {
 
   progressCard.style.display = 'block';
   scanBtn.disabled = true;
-  scanBtn.textContent = '⏳ 辨識中...';
+  scanBtn.textContent = '⏳ AI 辨識中...';
+  progressFill.style.width = '30%';
+  progressText.textContent = '正在將圖片傳送至 Gemini AI...';
 
   try {
-    const worker = await Tesseract.createWorker('chi_tra+eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const pct = Math.round(m.progress * 100);
-          progressFill.style.width = pct + '%';
-          progressText.textContent = `辨識中... ${pct}%`;
-        } else {
-          progressText.textContent = m.status;
-        }
-      }
+    // Get base64 image data
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    progressFill.style.width = '50%';
+    progressText.textContent = 'Gemini AI 正在辨識名片...';
+
+    const response = await fetch('/api/ocr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl, mimeType: 'image/jpeg' })
     });
 
-    const { data: { text } } = await worker.recognize(img.src);
-    await worker.terminate();
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || 'AI 辨識失敗');
+    }
 
     progressFill.style.width = '100%';
-    progressText.textContent = '辨識完成！正在解析資料...';
+    progressText.textContent = 'AI 辨識完成！正在填入資料...';
+
+    const data = result.data;
 
     setTimeout(() => {
-      parseBusinessCard(text);
+      // Fill in the form with Gemini's structured results
+      document.getElementById('f_name').value = data.name || '';
+      document.getElementById('f_title').value = data.title || '';
+      document.getElementById('f_company').value = data.company || '';
+      document.getElementById('f_phone').value = data.phone || '';
+      document.getElementById('f_mobile').value = data.mobile || '';
+      document.getElementById('f_email').value = data.email || '';
+      document.getElementById('f_website').value = data.website || '';
+      document.getElementById('f_address').value = data.address || '';
+      document.getElementById('f_industry').value = data.industry || '其他';
+      document.getElementById('f_notes').value = data.notes || '';
+      document.getElementById('f_rawText').value = data.rawText || '';
+
       progressCard.style.display = 'none';
       document.getElementById('resultCard').style.display = 'block';
       scanBtn.textContent = '🔍 開始辨識';
       scanBtn.disabled = false;
-      showToast('&#x2705; 名片辨識完成！', 'success');
+      showToast('✅ AI 名片辨識完成！', 'success');
     }, 500);
 
   } catch (e) {
@@ -846,82 +871,6 @@ async function startOCR() {
     scanBtn.textContent = '🔍 開始辨識';
     scanBtn.disabled = false;
   }
-}
-
-// ===== Parse Business Card Text =====
-function parseBusinessCard(text) {
-  document.getElementById('f_rawText').value = text;
-
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-  // Email
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w{2,}/);
-  document.getElementById('f_email').value = emailMatch ? emailMatch[0] : '';
-
-  // Phone patterns
-  const phonePatterns = text.match(/(?:\+?886[-\s]?|0)[\d\s()-]{7,}/g) || [];
-  const phones = phonePatterns.map(p => p.replace(/\s+/g, '').trim());
-  document.getElementById('f_phone').value = phones[0] || '';
-  document.getElementById('f_mobile').value = phones[1] || '';
-
-  // Website
-  const urlMatch = text.match(/(?:https?:\/\/)?(?:www\.)?[\w.-]+\.(?:com|tw|org|net|io|co)(?:\.tw)?[\/\w.-]*/i);
-  document.getElementById('f_website').value = urlMatch ? urlMatch[0] : '';
-
-  // Address - look for patterns with 市/縣/區/路/街/號
-  const addressMatch = text.match(/[\u4e00-\u9fff]*(?:市|縣|區|鄉|鎮)[\u4e00-\u9fff]*(?:路|街|巷|弄|號|樓|段|大道|Rd|St|Ave).*/);
-  document.getElementById('f_address').value = addressMatch ? addressMatch[0] : '';
-
-  // Try to identify name, company, title from remaining text
-  const knownValues = [
-    document.getElementById('f_email').value,
-    document.getElementById('f_phone').value,
-    document.getElementById('f_mobile').value,
-    document.getElementById('f_website').value,
-    document.getElementById('f_address').value
-  ].filter(Boolean);
-
-  const remainingLines = lines.filter(line => {
-    return !knownValues.some(v => line.includes(v)) &&
-      !line.match(/^[\d\s()+.-]+$/) &&
-      !line.match(/^(?:tel|fax|phone|email|e-mail|address|地址|電話|傳真|手機|網址)/i);
-  });
-
-  // Title keywords
-  const titleKeywords = ['總經理', '經理', '主任', '總監', '董事', '執行長', 'CEO', 'CTO', 'CFO', 'COO',
-    '副總', '協理', '處長', '組長', '課長', '專員', '業務', '工程師', 'Manager', 'Director',
-    'Engineer', 'VP', 'President', 'Supervisor', '設計師', '顧問', '助理', '秘書', '主管'];
-
-  // Company keywords
-  const companyKeywords = ['股份', '有限', '公司', '企業', '集團', '工業', '科技', '國際',
-    'Corp', 'Inc', 'Ltd', 'LLC', 'Co.', 'Company', 'Group', 'Tech'];
-
-  let name = '', company = '', title = '';
-
-  for (const line of remainingLines) {
-    if (!company && companyKeywords.some(k => line.includes(k))) {
-      company = line;
-    } else if (!title && titleKeywords.some(k => line.includes(k))) {
-      title = line;
-    } else if (!name && line.length >= 2 && line.length <= 10 && /[\u4e00-\u9fff]/.test(line)) {
-      name = line;
-    }
-  }
-
-  // If still no name, pick shortest Chinese line
-  if (!name) {
-    const candidates = remainingLines.filter(l => /[\u4e00-\u9fff]/.test(l) && l !== company && l !== title);
-    candidates.sort((a, b) => a.length - b.length);
-    if (candidates.length > 0) name = candidates[0];
-  }
-
-  document.getElementById('f_name').value = name;
-  document.getElementById('f_company').value = company;
-  document.getElementById('f_title').value = title;
-
-  // Auto classify industry
-  const industry = classifyIndustry(company, title, text);
-  document.getElementById('f_industry').value = industry;
 }
 
 // ===== Industry Classification =====
